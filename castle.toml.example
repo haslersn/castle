@@ -1,0 +1,13 @@
+expander_device = "/dev/spidev0.0"
+
+[output_pins]
+green_leds = [ 1, 4 ]
+red_leds = [ 2, 3 ]
+lock = 0
+
+[input_pins]
+hinge = 2
+
+[server]
+mount_point = "/castle"
+port = 8020
