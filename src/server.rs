@@ -5,6 +5,7 @@ use crate::lock::LockState;
 use crate::util::Result;
 use rocket::config::Config;
 use rocket::config::Environment;
+use rocket::http::Status;
 use rocket::State;
 use rocket_contrib::json::Json;
 use std::sync::Arc;
@@ -16,6 +17,22 @@ pub struct ServerSettings {
     pub port: u16,
 }
 
+#[derive(Deserialize)]
+struct LockInput {
+    state: Option<LockState>,
+}
+
+#[derive(Serialize)]
+struct LockOutput {
+    state: LockState,
+    last_change: u64,
+}
+
+#[derive(Serialize)]
+struct HingeOutput {
+    state: HingeState,
+}
+
 pub fn run(settings: ServerSettings, hinge: Arc<Mutex<Hinge>>, lock: Arc<Mutex<Lock>>) {
     rocket::custom(
         Config::build(Environment::Staging)
@@ -25,48 +42,52 @@ pub fn run(settings: ServerSettings, hinge: Arc<Mutex<Hinge>>, lock: Arc<Mutex<L
     )
     .mount(
         &settings.mount_point,
-        routes![
-            put_lock_state,
-            toggle_lock_state,
-            get_lock_state,
-            get_hinge_state
-        ],
+        routes![put_lock, put_lock_toggle, get_lock, get_hinge],
     )
     .manage(hinge)
     .manage(lock)
     .launch();
 }
 
-#[put("/lock-state", data = "<new_state>")]
-fn put_lock_state(
-    state: State<Arc<Mutex<Lock>>>,
-    new_state: Json<LockState>,
-) -> Result<Json<LockState>> {
+#[put("/lock", data = "<data>")]
+fn put_lock(state: State<Arc<Mutex<Lock>>>, data: Json<LockInput>) -> Result<Status> {
     let lock = &mut state.inner().lock().unwrap();
-    let new_state = new_state.into_inner();
-    lock.set_state(new_state)?;
-    Ok(Json(new_state))
+    let data = data.into_inner();
+    if let Some(new_state) = data.state {
+        lock.set_state(new_state)?;
+    }
+    Ok(Status::NoContent)
 }
 
-#[post("/lock-state?toggle")]
-fn toggle_lock_state(state: State<Arc<Mutex<Lock>>>) -> Result<Json<LockState>> {
+#[post("/lock?toggle")]
+fn put_lock_toggle(state: State<Arc<Mutex<Lock>>>) -> Result<Status> {
     let lock = &mut state.inner().lock().unwrap();
     let new_state = match lock.read_state()? {
         LockState::Unlocked => LockState::Locked,
         LockState::Locked => LockState::Unlocked,
     };
     lock.set_state(new_state)?;
-    Ok(Json(new_state))
+    Ok(Status::NoContent)
 }
 
-#[get("/lock-state")]
-fn get_lock_state(state: State<Arc<Mutex<Lock>>>) -> Result<Json<LockState>> {
+#[get("/lock")]
+fn get_lock(state: State<Arc<Mutex<Lock>>>) -> Result<Json<LockOutput>> {
     let lock = &state.inner().lock().unwrap();
-    Ok(Json(lock.read_state()?))
+    let result = LockOutput {
+        state: lock.read_state()?,
+        last_change: lock
+            .last_change()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_secs(),
+    };
+    Ok(Json(result))
 }
 
-#[get("/hinge-state")]
-fn get_hinge_state(state: State<Arc<Mutex<Hinge>>>) -> Result<Json<HingeState>> {
+#[get("/hinge")]
+fn get_hinge(state: State<Arc<Mutex<Hinge>>>) -> Result<Json<HingeOutput>> {
     let hinge = &mut state.inner().lock().unwrap();
-    Ok(Json(hinge.read_state()?))
+    let result = HingeOutput {
+        state: hinge.read_state()?,
+    };
+    Ok(Json(result))
 }

@@ -58,4 +58,8 @@ impl Lock {
         })?;
         Ok(())
     }
+
+    pub fn last_change(&self) -> SystemTime {
+        self.last_change
+    }
 }
