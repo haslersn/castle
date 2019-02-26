@@ -26,14 +26,14 @@ impl Error for LockBusy {}
 
 pub struct Lock {
     out_pin: Output,
-    last_set: SystemTime,
+    last_change: SystemTime,
 }
 
 impl Lock {
     pub fn new(out_pin: Output) -> Result<Self> {
         let mut lock = Lock {
             out_pin,
-            last_set: std::time::UNIX_EPOCH,
+            last_change: std::time::UNIX_EPOCH,
         };
         lock.set_state(LockState::Locked)?;
         Ok(lock)
@@ -48,10 +48,10 @@ impl Lock {
 
     pub fn set_state(&mut self, state: LockState) -> Result {
         let now = SystemTime::now();
-        if now < self.last_set + Duration::from_millis(250) {
+        if now < self.last_change + Duration::from_millis(250) {
             Err(LockBusy {})?;
         }
-        self.last_set = now;
+        self.last_change = now;
         self.out_pin.set_value(match state {
             LockState::Locked => IoValue::Low,
             LockState::Unlocked => IoValue::High,
