@@ -40,7 +40,7 @@ impl Lock {
     }
 
     pub fn read_state(&self) -> Result<LockState> {
-        Ok(match self.out_pin.clone().to_input().read_value()? {
+        Ok(match self.out_pin.read_value()? {
             IoValue::Low => LockState::Locked,
             IoValue::High => LockState::Unlocked,
         })
